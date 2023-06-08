@@ -4,14 +4,15 @@ pragma solidity ^0.8.0;
 import "../node_modules/@openzeppelin/contracts/token/ERC1155/extensions/ERC1155Supply.sol";
 import "./GameOwner.sol";
 import "../node_modules/@openzeppelin/contracts/security/Pausable.sol";
+import "../node_modules/@openzeppelin/contracts/utils/Strings.sol";
+import "./Crysm.sol";
 
 contract CrysmInventory is ERC1155Supply, GameOwner, Pausable {
 
     mapping(uint24 => bool) private isLeadColorTaken;
+    mapping(string => bool) private isColorCombinationTaken;
 
-    uint8[12] public redValues;
-    uint8[12] public greenValues;
-    uint8[12] public blueValues;
+    Crysm private whiteCrysm;
 
     constructor() ERC1155("TODO-https://sunflower-land.com/play/erc1155/{id}.json") payable {
         gameRoles[msg.sender] = true;
@@ -21,8 +22,40 @@ contract CrysmInventory is ERC1155Supply, GameOwner, Pausable {
         
     }
 
+    //I know this is UNSAFE, but it's just for testing. Maybe oraclizing later?
+    function randomNumber() internal view returns (uint24) {
+        return uint24(uint(blockhash(block.number - 1)));
+    }
+
     function setURI(string memory newuri) public onlyOwner returns (bool) {
         _setURI(newuri);
+        return true;
+    }
+
+    function crysMint(address to) public onlyGame returns (bool) {
+        uint24[12] memory colors;
+
+        //this sucks. it would be better iterate on leadColor gen to save gas (random reverts are not nice).
+        //when there are not possibile combinations anymore, revert
+        colors[0] = randomNumber(); 
+        require(!isLeadColorTaken[(colors[0])], "Can't mint another Crysm with this lead color");
+
+        string memory uri = Strings.toString(colors[0]);
+
+        do {
+            for(uint i=1; i<12; i++) {
+                colors[i]=randomNumber();
+                uri = string.concat(uri, "-");
+                uri = string.concat(uri, Strings.toString(colors[i]));
+            }
+        } while(isColorCombinationTaken[uri]);
+
+        isLeadColorTaken[colors[0]] = true;
+        isColorCombinationTaken[uri] = true;
+
+        //!!! check if "to" is already a Crysm owner !!!
+
+        whiteCrysm.safeMint(to, colors, uri);
         return true;
     }
 
